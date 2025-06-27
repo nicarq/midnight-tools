@@ -68,4 +68,12 @@ export const deriveRecipientAddress = async (): Promise<string | undefined> => {
   }
 
   return undefined;
+};
+
+// Utility: provide seed for the primary wallet without creating it (simpler, test-friendly)
+export const getPrimarySeed = (): string => {
+  if (MIDNIGHT_SEED) return MIDNIGHT_SEED;
+  const newSeed = bytesToHex(generateRandomSeed());
+  console.log('No MIDNIGHT_SEED provided. Using a new random seed:', newSeed);
+  return newSeed;
 }; 

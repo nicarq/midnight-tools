@@ -1,122 +1,91 @@
-import Rx from 'rxjs';
-import { nativeToken } from '@midnight-ntwrk/zswap';
-import { WalletBuilder } from '@midnight-ntwrk/wallet';
+import { getPrimarySeed } from './walletFactory';
 import {
-  WALLET_2,
-  INDEXER_HTTP,
-  INDEXER_WS,
-  PROVING_SERVER,
-  NODE_URL,
-  getNetworkId,
-} from './config';
-import type { WalletWithResource } from './walletFactory';
-
-import { buildPrimaryWallet, deriveRecipientAddress } from './walletFactory';
-import { waitForFunds, waitForSync } from './utils';
+  buildWallet,
+  startAndSync,
+  ensureFunds,
+  getBalance,
+  getAddress,
+  WalletWithResource,
+  reopenWallet,
+} from './walletService';
 import { executeTransfer } from './transfer';
+import { WALLET_2, RECIPIENT_ADDRESS } from './config';
+import { printBalances } from './balanceReporter';
+import { waitForFunds } from './utils';
 
 (async () => {
   try {
-    // 1. Build and start the primary wallet
-    const { wallet: wallet1, seed: seed1 } = await buildPrimaryWallet();
+    // ────────────────────────────────────────────────────────────────
+    // 1. SET-UP PRIMARY WALLET (WALLET_1)
+    // ────────────────────────────────────────────────────────────────
+    const wallet1 = await buildWallet(getPrimarySeed());
+    await startAndSync(wallet1);
+    await ensureFunds(wallet1);
 
-    console.log('\n=== WALLET_1 INFORMATION ===');
-    console.log('Wallet seed:', seed1);
-
-    // Prepare WALLET_2 (recipient) if its seed is provided
+    // ────────────────────────────────────────────────────────────────
+    // 2. OPTIONAL RECIPIENT WALLET (WALLET_2)
+    // ────────────────────────────────────────────────────────────────
     let wallet2: WalletWithResource | undefined;
-    let recipientAddress: string | undefined;
-    let initialBalanceWallet2: bigint | undefined;
-
     if (WALLET_2) {
-      wallet2 = (await WalletBuilder.buildFromSeed(
-        INDEXER_HTTP,
-        INDEXER_WS,
-        PROVING_SERVER,
-        NODE_URL,
-        WALLET_2,
-        getNetworkId()
-      )) as WalletWithResource;
-      wallet2.start();
-
-      console.log('\n=== RECIPIENT WALLET (WALLET_2) INFORMATION ===');
-      console.log(`Recipient wallet seed: ${WALLET_2}`);
-      console.log('Waiting for WALLET_2 to synchronize with the network...');
-      await waitForSync(wallet2);
-
-      const w2State = await Rx.firstValueFrom(wallet2.state());
-      recipientAddress = w2State.address;
-      initialBalanceWallet2 = w2State.balances[nativeToken()] ?? 0n;
-      console.log(`Recipient wallet address: ${recipientAddress}`);
+      wallet2 = await buildWallet(WALLET_2);
+      await startAndSync(wallet2);
     }
 
-    // 2. Make sure WALLET_1 has funds
-    let state = await Rx.firstValueFrom(wallet1.state());
-    let balance = state.balances[nativeToken()] ?? 0n;
-    if (balance === 0n) {
-      console.log('Waiting for incoming funds (native token)...');
-      balance = await waitForFunds(wallet1);
-      console.log('Funds detected. Current balance:', balance.toString(), 'DUST');
+    // ────────────────────────────────────────────────────────────────
+    // 3. BALANCES BEFORE TRANSFER
+    // ────────────────────────────────────────────────────────────────
+    const balancesBefore: Record<string, bigint> = {
+      WALLET_1: await getBalance(wallet1),
+    };
+    let wallet2BalanceBefore: bigint | undefined;
+    if (wallet2) {
+      wallet2BalanceBefore = await getBalance(wallet2);
+      balancesBefore.WALLET_2 = wallet2BalanceBefore;
     }
+    printBalances('BEFORE', balancesBefore);
 
-    // 3. Wait until WALLET_1 is fully synchronized
-    console.log('Waiting for wallet to synchronize with the network...');
-    await waitForSync(wallet1);
-    console.log('Wallet is synchronized!');
+    // ────────────────────────────────────────────────────────────────
+    // 4. EXECUTE TRANSFER
+    // ────────────────────────────────────────────────────────────────
+    const recipientAddress = wallet2
+      ? await getAddress(wallet2)
+      : RECIPIENT_ADDRESS;
 
-    // Capture initial balances **after** full sync
-    state = await Rx.firstValueFrom(wallet1.state());
-    const initialBalanceWallet1 = state.balances[nativeToken()] ?? 0n;
-
-    console.log('\n=== BALANCES BEFORE TRANSFER ===');
-    console.log('WALLET_1 balance:', initialBalanceWallet1.toString(), 'DUST');
-    if (wallet2 && initialBalanceWallet2 !== undefined) {
-      console.log('WALLET_2 balance:', initialBalanceWallet2.toString(), 'DUST');
-    }
-
-    // 4. Determine recipient address (fallback to deriveRecipientAddress when WALLET_2 is absent)
-    if (!recipientAddress) {
-      recipientAddress = await deriveRecipientAddress();
-    }
     if (!recipientAddress) {
       throw new Error(
-        '❌ ERROR: No recipient address or WALLET_2 seed provided! Please set WALLET_2 or RECIPIENT_ADDRESS in your .env file.'
+        '❌ ERROR: No recipient address. Provide WALLET_2 seed or RECIPIENT_ADDRESS in .env.'
       );
     }
 
-    // 5. Execute the transfer (1 DUST)
     const amountToSend = 1n;
     await executeTransfer(wallet1, recipientAddress, amountToSend);
 
-    // 6. Give the network a moment to process
-    console.log('\nWaiting for transaction to be processed...');
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (wallet2 && wallet2BalanceBefore !== undefined) {
+      console.log('\nWaiting for WALLET_2 to receive funds…');
+      // Ensure wallet2 is up-to-date; reopen to clear cache then wait for funds
+      wallet2 = await reopenWallet(WALLET_2 as string, wallet2);
+      await waitForFunds(wallet2, wallet2BalanceBefore + amountToSend);
+    } else {
+      console.log('\nWaiting briefly for network confirmation…');
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
 
-    // 7. Report final state
-    state = await Rx.firstValueFrom(wallet1.state());
-    const balanceAfterWallet1 = state.balances[nativeToken()] ?? 0n;
-
-    let balanceAfterWallet2: bigint | undefined;
+    // ────────────────────────────────────────────────────────────────
+    // 5. BALANCES AFTER TRANSFER
+    // ────────────────────────────────────────────────────────────────
+    const balancesAfter: Record<string, bigint> = {
+      WALLET_1: await getBalance(wallet1),
+    };
     if (wallet2) {
-      // Ensure WALLET_2 state is up-to-date
-      await waitForSync(wallet2);
-      const w2StateAfter = await Rx.firstValueFrom(wallet2.state());
-      balanceAfterWallet2 = w2StateAfter.balances[nativeToken()] ?? 0n;
+      balancesAfter.WALLET_2 = await getBalance(wallet2);
     }
+    printBalances('AFTER', balancesAfter);
 
-    console.log('\n=== BALANCES AFTER TRANSFER ===');
-    console.log('WALLET_1 remaining balance:', balanceAfterWallet1.toString(), 'DUST');
-    if (wallet2 && balanceAfterWallet2 !== undefined) {
-      console.log('WALLET_2 new balance:', balanceAfterWallet2.toString(), 'DUST');
-    }
-
-    // 8. Graceful shutdown
+    // ────────────────────────────────────────────────────────────────
+    // 6. SHUTDOWN
+    // ────────────────────────────────────────────────────────────────
     await wallet1.close();
-    if (wallet2) {
-      await wallet2.close();
-      console.log('Recipient wallet closed.');
-    }
-    console.log('Primary wallet closed.');
+    if (wallet2) await wallet2.close();
   } catch (err) {
     console.error(err);
     process.exit(1);
