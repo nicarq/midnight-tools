@@ -2,13 +2,19 @@ import { readFileSync } from 'fs';
 import { parse } from 'dotenv';
 import { NetworkId } from '@midnight-ntwrk/zswap';
 
-// Parse .env without mutating process.env
-let env: Record<string, string> = {};
+// 1. Try to read a local .env file (non-fatal if it does not exist)
+let fileEnv: Record<string, string> = {};
 try {
-  env = parse(readFileSync('.env', 'utf8')) as Record<string, string>;
-} catch (error) {
-  console.error('❌ ERROR: Could not read .env file:', error);
+  fileEnv = parse(readFileSync('.env', 'utf8')) as Record<string, string>;
+} catch {
+  // Silently ignore when the .env file is absent – we'll fall back to process.env or defaults
 }
+
+// 2. Merge process.env and .env values giving precedence to the .env file
+const env: Record<string, string | undefined> = {
+  ...process.env,
+  ...fileEnv,
+};
 
 export const {
   INDEXER_HTTP = 'https://indexer.testnet-02.midnight.network/api/v1/graphql',
@@ -19,7 +25,21 @@ export const {
   WALLET_2,
   RECIPIENT_ADDRESS,
   NETWORK_ID,
-} = env;
+} = env as Record<string, string>;
+
+// 3. Ensure these resolved values are also available on process.env so that any
+//    downstream library that looks at process.env directly continues to work.
+for (const [key, value] of Object.entries({
+  INDEXER_HTTP,
+  INDEXER_WS,
+  PROVING_SERVER,
+  NODE_URL,
+  NETWORK_ID,
+})) {
+  if (process.env[key] === undefined) {
+    process.env[key] = value as string;
+  }
+}
 
 export const getNetworkId = (): NetworkId => {
   const networkId = (NETWORK_ID ?? '').toLowerCase();

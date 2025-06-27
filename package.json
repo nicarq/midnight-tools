@@ -2,14 +2,19 @@
   "name": "midnight-monorepo",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "npm run build -w midnight-lib && npm run build -w midnight-app",
+    "build": "npm run build -w midnight-lib && npm run build -w midnight-app && npm run build -w midnight-mcp",
     "dev": "npm run dev -w midnight-app"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.2"
   }
 }

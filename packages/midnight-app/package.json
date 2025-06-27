@@ -9,6 +9,6 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "midnight-lib": "workspace:*"
+    "midnight-lib": "*"
   }
 } 
