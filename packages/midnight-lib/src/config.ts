@@ -1,13 +1,15 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { parse } from 'dotenv';
 import { NetworkId } from '@midnight-ntwrk/zswap';
 
 // 1. Try to read a local .env file (non-fatal if it does not exist)
 let fileEnv: Record<string, string> = {};
-try {
-  fileEnv = parse(readFileSync('.env', 'utf8')) as Record<string, string>;
-} catch {
-  // Silently ignore when the .env file is absent – we'll fall back to process.env or defaults
+if (existsSync('.env')) {
+  try {
+    fileEnv = parse(readFileSync('.env', 'utf8')) as Record<string, string>;
+  } catch (err) {
+    console.warn('Failed to parse .env file – proceeding with defaults:', (err as Error).message);
+  }
 }
 
 // 2. Merge process.env and .env values giving precedence to the .env file
@@ -24,7 +26,8 @@ export const {
   MIDNIGHT_SEED,
   WALLET_2,
   RECIPIENT_ADDRESS,
-  NETWORK_ID,
+  // Default to the TestNet network when no explicit NETWORK_ID is provided
+  NETWORK_ID = 'testnet',
 } = env as Record<string, string>;
 
 // 3. Ensure these resolved values are also available on process.env so that any

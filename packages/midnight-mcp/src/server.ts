@@ -21,6 +21,19 @@ import {
 let currentSeed: string | null = null;
 let cachedWallet: any | null = null;
 
+// Redirect console.log output to stderr to avoid contaminating MCP JSON on stdout
+console.log = (...args: unknown[]) => {
+  // Serialize non-string arguments similarly to default console.log behaviour
+  const message = args
+    .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg, null, 2)))
+    .join(" ");
+  process.stderr.write(message + "\n");
+};
+
+// Ensure other common logging methods also go to stderr
+console.info = console.log;
+console.warn = console.log;
+
 /**
  * MCP server exposing midnight-lib as resources & tools.
  */
@@ -55,6 +68,9 @@ async function main() {
       currentSeed = seed;
       cachedWallet = await buildWallet(seed);
       return {
+        content: [
+          { type: "text", text: "Seed stored and wallet initialized" },
+        ],
         structuredContent: { success: true },
       };
     }
@@ -76,6 +92,9 @@ async function main() {
       }
       const balance = await libGetBalance(cachedWallet);
       return {
+        content: [
+          { type: "text", text: `Balance: ${balance.toString()}` },
+        ],
         structuredContent: { balance: balance.toString() },
       };
     }
@@ -97,6 +116,9 @@ async function main() {
       }
       const address = await libGetAddress(cachedWallet);
       return {
+        content: [
+          { type: "text", text: `Wallet address: ${address}` },
+        ],
         structuredContent: { address },
       };
     }
@@ -123,10 +145,17 @@ async function main() {
       }
       await executeTransfer(cachedWallet, recipient, BigInt(amount));
       return {
+        content: [
+          { type: "text", text: `Transferred ${amount} to ${recipient}` },
+        ],
         structuredContent: { success: true },
       };
     }
   );
+
+  // Register generic handlers so clients don\'t error when querying for resources/prompts
+  server.setResourceRequestHandlers();
+  server.setPromptRequestHandlers();
 
   // Start the stdio transport – suitable for local agent subprocess integration
   await server.connect(new StdioServerTransport());
