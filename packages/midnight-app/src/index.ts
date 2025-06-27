@@ -1,5 +1,5 @@
-import { getPrimarySeed } from './walletFactory';
 import {
+  getPrimarySeed,
   buildWallet,
   startAndSync,
   ensureFunds,
@@ -7,11 +7,12 @@ import {
   getAddress,
   WalletWithResource,
   reopenWallet,
-} from './walletService';
-import { executeTransfer } from './transfer';
-import { WALLET_2, RECIPIENT_ADDRESS } from './config';
-import { printBalances } from './balanceReporter';
-import { waitForFunds } from './utils';
+  executeTransfer,
+  WALLET_2,
+  RECIPIENT_ADDRESS,
+  printBalances,
+  waitForFunds,
+} from 'midnight-lib';
 
 (async () => {
   try {
@@ -39,17 +40,16 @@ import { waitForFunds } from './utils';
     };
     let wallet2BalanceBefore: bigint | undefined;
     if (wallet2) {
-      wallet2BalanceBefore = await getBalance(wallet2);
-      balancesBefore.WALLET_2 = wallet2BalanceBefore;
+      const balance = await getBalance(wallet2);
+      wallet2BalanceBefore = balance;
+      balancesBefore.WALLET_2 = balance;
     }
     printBalances('BEFORE', balancesBefore);
 
     // ────────────────────────────────────────────────────────────────
     // 4. EXECUTE TRANSFER
     // ────────────────────────────────────────────────────────────────
-    const recipientAddress = wallet2
-      ? await getAddress(wallet2)
-      : RECIPIENT_ADDRESS;
+    const recipientAddress = wallet2 ? await getAddress(wallet2) : RECIPIENT_ADDRESS;
 
     if (!recipientAddress) {
       throw new Error(
@@ -90,4 +90,4 @@ import { waitForFunds } from './utils';
     console.error(err);
     process.exit(1);
   }
-})();
+})(); 

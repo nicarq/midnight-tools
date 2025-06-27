@@ -1,28 +1,13 @@
 {
-  "name": "midnight-simple",
-  "version": "1.0.0",
+  "name": "midnight-monorepo",
+  "private": true,
   "type": "module",
-  "main": "index.js",
+  "workspaces": ["packages/*"],
   "scripts": {
-    "build": "tsc -p .",
-    "start": "node --loader ts-node/esm src/index.ts",
-    "dev": "tsx src/index.ts",
-    "prod": "npm run build && node dist/index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "@midnight-ntwrk/wallet": "^5.0.0",
-    "@midnight-ntwrk/wallet-api": "^5.0.0",
-    "@midnight-ntwrk/wallet-sdk-hd": "^2.0.0",
-    "@midnight-ntwrk/zswap": "^4.0.0",
-    "dotenv": "^16.6.1",
-    "rxjs": "^7.8.2"
+    "build": "npm run build -w midnight-lib && npm run build -w midnight-app",
+    "dev": "npm run dev -w midnight-app"
   },
   "devDependencies": {
-    "@types/node": "^24.0.6",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"

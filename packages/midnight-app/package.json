@@ -1,0 +1,14 @@
+{
+  "name": "midnight-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "midnight-lib": "workspace:*"
+  }
+} 
