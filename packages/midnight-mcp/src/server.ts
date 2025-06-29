@@ -44,6 +44,31 @@ async function main() {
     summary: "MCP interface for the midnight-lib package",
   });
 
+  // Pre-initialize the wallet if the seed is provided via an environment
+  // variable (MIDNIGHT_SEED or SEED) or a command-line flag ("--seed=<value>").
+  // This lets the server come up with an active wallet without requiring the
+  // client to invoke the `set_seed` tool first.
+  const seedFromEnv = process.env.MIDNIGHT_SEED ?? process.env.SEED;
+  const seedFromArg = process.argv.find((arg) => arg.startsWith("--seed="))?.slice("--seed=".length);
+  const initialSeed = seedFromEnv || seedFromArg;
+  if (initialSeed) {
+    try {
+      // Close any previously opened wallet to free resources (unlikely at
+      // startup but keeps logic symmetrical with the `set_seed` tool).
+      if (cachedWallet && typeof (cachedWallet as any).close === "function") {
+        await (cachedWallet as any).close();
+      }
+      currentSeed = initialSeed;
+      cachedWallet = await buildWallet(initialSeed);
+      console.log(
+        `Wallet initialised from ${seedFromEnv ? "environment variable" : "command-line argument"}.`
+      );
+    } catch (err) {
+      console.error("Failed to initialise wallet from provided seed:", err);
+      process.exit(1);
+    }
+  }
+
   /* ---------------- Tools ---------------- */
 
   // Tool: set_seed – stores the seed and builds the wallet for later use
@@ -152,10 +177,6 @@ async function main() {
       };
     }
   );
-
-  // Register generic handlers so clients don\'t error when querying for resources/prompts
-  server.setResourceRequestHandlers();
-  server.setPromptRequestHandlers();
 
   // Start the stdio transport – suitable for local agent subprocess integration
   await server.connect(new StdioServerTransport());
